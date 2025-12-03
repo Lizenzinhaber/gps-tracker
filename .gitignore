@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.env
+config/private*.js
+*.pem
+*.key
+*.crt
+tracker-*-qr.png  # oder behalten falls gewollt
+.env
