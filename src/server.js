@@ -47,14 +47,14 @@ async function initializeServer() {
         
         // Server starten
         const PORT = process.env.PORT || 3000;
-        server.listen(PORT, () => {
-            console.log(`🚀 GPS Tracker Server läuft auf http://localhost:${PORT}`);
-            console.log(`📊 Dashboard verfügbar unter http://localhost:${PORT}/dashboard`);
+        server.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 GPS Tracker Server läuft auf http://0.0.0.0:${PORT}`);
+            console.log(`📊 Dashboard verfügbar unter http://0.0.0.0:${PORT}/dashboard`);
             console.log(`🔐 Security System aktiviert`);
             console.log(`📁 Modulare Struktur geladen`);
         });
         
-    } catch (error) {
+            } catch (error) {
         console.error('Server Initialization Error:', error);
         process.exit(1);
     }

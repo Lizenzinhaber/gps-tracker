@@ -1,7 +1,5 @@
 require('dotenv').config
-
 const mariadb = require('mariadb');
-
 const pool = mariadb.createPool({
     host: process.env.DATABASE_HOST || 'localhost',
     user: process.env.DATABASE_USER || 'gps_user',
@@ -9,8 +7,6 @@ const pool = mariadb.createPool({
     database: process.env.DATABASE_NAME || 'gps_tracker',
     connectionLimit: 5
 });
-
-
 // Hilfsfunktion zum Laden der Device-Konfig
 async function loadDeviceConfig() {
     let conn;
@@ -50,5 +46,4 @@ async function loadDeviceConfig() {
         if (conn) conn.release();
     }
 }
-
 module.exports = { pool, loadDeviceConfig };
