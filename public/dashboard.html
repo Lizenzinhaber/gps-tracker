@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="de" data-bs-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Tracker Dashboard</title>
+    <link href="/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .navbar .btn-outline-light:hover{
+            background-color: white;
+            color: #000;
+            border-color: white;
+        } 
+
+        .stat-card {
+            transition: all 0.3s ease;
+            border-radius: 15px;
+            border: none;
+        }
+
+        .data-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        #map {
+            height: 50vh;
+            /* Etwas kleiner für History-Controls */
+            border-radius: 10px;
+            z-index: 1;
+        }
+
+        .map-container {
+            position: relative;
+        }
+
+        .device-info {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .history-controls {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .time-slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .playback-speed {
+            width: 80px;
+        }
+
+        .history-point {
+            cursor: pointer;
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .history-point:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .history-point.active {
+            background: #007bff;
+            color: white;
+        }
+
+        .route-line {
+            stroke: #007bff;
+            stroke-width: 3;
+            stroke-dasharray: 5, 5;
+            opacity: 0.7;
+        }
+
+        .access-denied {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 60vh;
+            flex-direction: column;
+        }
+
+        .interval-control {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-dark gradient-bg">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">
+                🛰️ GPS Tracker Control
+            </a>
+            <span class="navbar-text">
+                📊 Tracker Dashboard
+            </span>
+            <div class="navbar-nav ms-auto">
+                <button class="nav-link btn btn-outline-light btn-sm" onclick="goToPairing()">
+                    🔄 Anderen Tracker wählen
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Access Denied Screen -->
+    <div id="accessDenied" class="access-denied" style="display: none;">
+        <div class="card stat-card bg-dark text-white text-center p-5">
+            <div class="card-body">
+                <h1 class="display-4 mb-4">🔒</h1>
+                <h3 class="mb-3">Zugriff verweigert</h3>
+                <p class="text-muted mb-4">Du hast keinen Zugriff auf dieses Dashboard.<br>Bitte verknüpfe zuerst einen
+                    Tracker.</p>
+                <button class="btn btn-primary btn-lg" onclick="goToPairing()">
+                    📱 Tracker verknüpfen
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard Content -->
+    <div id="dashboardContent" style="display: none;">
+        <div class="container-fluid mt-4">
+            <div class="row g-4">
+                <!-- Karte und Hauptdaten -->
+                <div class="col-lg-8">
+                    <div class="card stat-card bg-dark text-white">
+                        <div
+                            class="card-header bg-dark bg-opacity-50 border-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <h4 class="mb-0">🗺️ Tracker Position</h4>
+                                <small class="text-muted" id="mapSubtitle">Letzte bekannte Position auf der
+                                    Karte</small>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="liveModeToggle" checked>
+                                <label class="form-check-label" for="liveModeToggle">
+                                    📍 Live Modus
+                                </label>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="map-container">
+                                <div id="map"></div>
+                            </div>
+
+                            <!-- History Controls -->
+                            <div class="history-controls" id="historyControls" style="display: none;">
+                                <div class="row align-items-center mb-3">
+                                    <div class="col-md-4">
+                                        <label for="datePicker" class="form-label">📅 Datum auswählen:</label>
+                                        <input type="date" class="form-control bg-dark text-white" id="datePicker">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="speedSelect" class="form-label">Geschwindigkeit:</label>
+                                        <select class="form-select bg-dark text-white playback-speed" id="speedSelect">
+                                            <option value="2000">0.05x</option>
+                                            <option value="1000">0.1x</option>
+                                            <option value="500" selected>0.2x</option>
+                                            <option value="250">0.5x</option>
+                                            <option value="100">1x</option>
+                                            <option value="50">2x</option>
+                                            <option value="20">5x</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button class="btn btn-outline-success w-100" id="playPauseBtn">
+                                            ▶️ Play
+                                        </button>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="showRouteToggle">
+                                            <label class="form-check-label" for="showRouteToggle">
+                                                Route
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row align-items-center">
+                                    <div class="col-md-2">
+                                        <small id="currentTime">--:--:--</small>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <input type="range" class="form-range time-slider" id="timeSlider" min="0"
+                                            max="100" value="0">
+                                    </div>
+                                    <div class="col-md-2 text-end">
+                                        <small id="totalTime">--:--:--</small>
+                                    </div>
+                                </div>
+
+                                <!-- Punkte-Liste -->
+                                <div class="mt-3">
+                                    <div class="d-flex flex-wrap" id="pointsList">
+                                        <!-- Wird dynamisch gefüllt -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row mt-3 text-center">
+                                <div class="col-md-4">
+                                    <div class="card bg-secondary bg-opacity-25 border-0">
+                                        <div class="card-body">
+                                            <h6 class="text-muted">Aktuelles Intervall</h6>
+                                            <div class="data-value" id="currentInterval">-</div>
+                                            <small class="text-muted">Sekunden</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-secondary bg-opacity-25 border-0">
+                                        <div class="card-body">
+                                            <h6 class="text-muted">Letztes Update</h6>
+                                            <div class="data-value" id="lastUpdateTime">-</div>
+                                            <small class="text-muted">Uhrzeit</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-secondary bg-opacity-25 border-0">
+                                        <div class="card-body">
+                                            <h6 class="text-muted">Aktiver Tracker</h6>
+                                            <div class="data-value" id="activeTracker">-</div>
+                                            <small class="text-muted">Gerät</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Geräte-Info -->
+                <div class="col-lg-4">
+                    <div class="device-info">
+                        <h5>📡 Tracker Information</h5>
+                        <p class="mb-2" id="trackerDescription">-</p>
+                        <small class="text-muted" id="trackerType">-</small>
+                    </div>
+
+                    <div class="card stat-card bg-dark text-white mb-4">
+                        <div class="card-header bg-dark bg-opacity-50 border-0">
+                            <h5 class="mb-0">📊 Geräte-Status</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush bg-transparent">
+                                <li
+                                    class="list-group-item bg-transparent text-white d-flex justify-content-between align-items-center border-0">
+                                    <span>🔋 Batterie:</span>
+                                    <span class="badge bg-success fs-6" id="batteryLevel">-</span>
+                                </li>
+                                <li
+                                    class="list-group-item bg-transparent text-white d-flex justify-content-between align-items-center border-0">
+                                    <span>🏔️ Höhe:</span>
+                                    <span class="badge bg-info fs-6" id="altitude">-</span>
+                                </li>
+                                <li
+                                    class="list-group-item bg-transparent text-white d-flex justify-content-between align-items-center border-0">
+                                    <span>🆔 Gerät:</span>
+                                    <span class="badge bg-secondary fs-6" id="deviceId">-</span>
+                                </li>
+                                <li
+                                    class="list-group-item bg-transparent text-white d-flex justify-content-between align-items-center border-0">
+                                    <span>📍 Breitengrad:</span>
+                                    <span class="badge bg-warning text-dark fs-6" id="latitude">-</span>
+                                </li>
+                                <li
+                                    class="list-group-item bg-transparent text-white d-flex justify-content-between align-items-center border-0">
+                                    <span>📍 Längengrad:</span>
+                                    <span class="badge bg-warning text-dark fs-6" id="longitude">-</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Aktions-Buttons -->
+                    <div class="card stat-card bg-dark text-white">
+                        <div class="card-header bg-dark bg-opacity-50 border-0">
+                            <h5 class="mb-0">⚡ Aktionen</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-info" onclick="refreshData()">
+                                    🔄 Daten aktualisieren
+                                </button>
+                            </div>
+                            <div class="mt-3">
+                                <small class="text-muted">Daten werden alle <span id="refreshInfo">-</span> Sekunden
+                                    aktualisiert</small>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Intervall-Steuerung -->
+                    <div class="card stat-card bg-dark text-white mt-4">
+                        <div class="card-header bg-dark bg-opacity-50 border-0">
+                            <h5 class="mb-0">⏱️ Sende-Intervall</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="intervalInput" class="form-label">
+                                    Aktuelles Intervall: <span id="currentIntervalDisplay"
+                                        class="badge bg-info">60s</span>
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control bg-dark text-white" id="intervalInput"
+                                        min="10" max="3600" value="60">
+                                    <span class="input-group-text">Sekunden</span>
+                                </div>
+                                <small class="text-muted">Intervall zwischen 10 und 3600 Sekunden</small>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-success" onclick="updateInterval()">
+                                    💾 Intervall speichern
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="loadCurrentInterval()">
+                                    🔄 Aktuelles laden
+                                </button>
+                            </div>
+                            <div id="intervalFeedback" class="mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Globale Variablen
+        let map;
+        let marker;
+        let currentInterval = 60;
+        let refreshInterval;
+        let currentDevice = null;
+
+        // History Variablen
+        let historyData = [];
+        let currentHistoryIndex = 0;
+        let playInterval;
+        let isPlaying = false;
+        let routeLine = null;
+        let historyMarkers = [];
+
+        // Zugriffskontrolle
+        async function validateAccess() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlToken = urlParams.get('token');
+            const urlDevice = urlParams.get('device');
+
+            const sessionToken = sessionStorage.getItem('current_access_token');
+            const sessionDevice = sessionStorage.getItem('current_device_id');
+
+            // Prüfe URL Parameter und Session
+            const accessToken = urlToken || sessionToken;
+            const deviceId = urlDevice || sessionDevice;
+
+            if (!accessToken || !deviceId) {
+                showAccessDenied();
+                return false;
+            }
+
+            try {
+                const response = await fetch('/api/validate-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_id: deviceId,
+                        access_token: accessToken
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    currentDevice = result.device;
+
+                    // Session aktualisieren
+                    sessionStorage.setItem('current_device_id', deviceId);
+                    sessionStorage.setItem('current_access_token', accessToken);
+
+                    showDashboard();
+                    return true;
+                } else {
+                    throw new Error(result.message || 'Ungültiger Zugriff');
+                }
+
+            } catch (error) {
+                console.error('Access validation error:', error);
+                showAccessDenied();
+                return false;
+            }
+        }
+
+        function showAccessDenied() {
+            document.getElementById('accessDenied').style.display = 'flex';
+            document.getElementById('dashboardContent').style.display = 'none';
+        }
+
+        function showDashboard() {
+            document.getElementById('accessDenied').style.display = 'none';
+            document.getElementById('dashboardContent').style.display = 'block';
+
+            // Dashboard initialisieren
+            initDashboard();
+        }
+
+        function goToPairing() {
+            window.location.href = '/';
+        }
+
+        // Dashboard initialisieren
+        function initDashboard() {
+            initMap();
+            loadDeviceInfo();
+            loadIntervalInfo();
+            fetchData();
+            loadAvailableDates();
+
+            // WebSocket für Live-Daten
+            initWebSocket();
+
+            // UI Event Listener
+            setupEventListeners();
+        }
+
+        // Karte initialisieren
+        function initMap() {
+            map = L.map('map').setView([48.1351, 11.5820], 13);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+
+            marker = L.marker([0, 0], { opacity: 0 }).addTo(map);
+        }
+
+        // Device Info laden
+        function loadDeviceInfo() {
+            if (currentDevice) {
+                document.getElementById('trackerDescription').textContent = currentDevice.description || 'Haupt-GPS Tracker';
+                document.getElementById('trackerType').textContent = `Typ: ${currentDevice.type || 'main'}`;
+                document.getElementById('activeTracker').textContent = currentDevice.name;
+            }
+        }
+
+        // Daten vom Server holen
+        async function fetchData() {
+            try {
+                const deviceId = sessionStorage.getItem('current_device_id');
+                const accessToken = sessionStorage.getItem('current_access_token');
+
+                if (!deviceId) {
+
+                    // Fallback: Aus URL-Parametern holen
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const urlDevice = urlParams.get('device');
+                    const urlToken = urlParams.get('token');
+
+
+                    if (urlDevice && urlToken) {
+                        // Session Storage aktualisieren
+                        sessionStorage.setItem('current_device_id', urlDevice);
+                        sessionStorage.setItem('current_access_token', urlToken);
+
+                        // Erneut mit korrekter deviceId versuchen
+                        return fetchData();
+                    } else {
+                        throw new Error('Keine Geräte-ID verfügbar');
+                    }
+                }
+
+                const response = await fetch(`/api/devices/${deviceId}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const deviceData = await response.json();
+
+                updateDisplay(deviceData);
+
+            } catch (error) {
+            }
+        }
+
+        // Mock-Daten generieren (temporär)
+        function generateMockData(deviceId) {
+            const baseLat = 48.1351 + (Math.random() * 0.02 - 0.01);
+            const baseLng = 11.5820 + (Math.random() * 0.02 - 0.01);
+
+            return {
+                deviceId: deviceId,
+                latitude: baseLat.toFixed(6),
+                longitude: baseLng.toFixed(6),
+                altitude: (520 + Math.random() * 50).toFixed(1),
+                timestamp: new Date().toISOString(),
+                battery: (80 + Math.random() * 20).toFixed(1)
+            };
+        }
+
+        // Intervall-Funktionen
+        async function updateInterval() {
+            try {
+                const intervalInput = document.getElementById('intervalInput');
+                const interval = parseInt(intervalInput.value);
+                const deviceId = sessionStorage.getItem('current_device_id');
+
+                if (!deviceId) {
+                    showFeedback('❌ Kein Gerät ausgewählt', 'danger');
+                    return;
+                }
+
+                if (isNaN(interval) || interval < 10 || interval > 3600) {
+                    showFeedback('❌ Intervall muss zwischen 10 und 3600 Sekunden liegen', 'danger');
+                    return;
+                }
+
+                const response = await fetch('/api/interval', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        interval: interval,
+                        deviceId: deviceId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    showFeedback('✅ Intervall erfolgreich aktualisiert', 'success');
+                    document.getElementById('currentIntervalDisplay').textContent = interval + 's';
+                    document.getElementById('currentInterval').textContent = interval;
+                    document.getElementById('refreshInfo').textContent = interval;
+
+                    // Auto-Refresh anpassen
+                    setupAutoRefresh(interval);
+                } else {
+                    throw new Error(result.message);
+                }
+
+            } catch (error) {
+                console.error('Intervall Update Fehler:', error);
+                showFeedback('❌ Fehler: ' + error.message, 'danger');
+            }
+        }
+
+        async function loadCurrentInterval() {
+            try {
+                const deviceId = sessionStorage.getItem('current_device_id');
+
+                if (!deviceId) {
+                    showFeedback('❌ Kein Gerät ausgewählt', 'danger');
+                    return;
+                }
+
+                const response = await fetch(`/api/interval-info/${deviceId}`);
+                const intervalInfo = await response.json();
+
+                document.getElementById('intervalInput').value = intervalInfo.interval;
+                document.getElementById('currentIntervalDisplay').textContent = intervalInfo.interval + 's';
+                showFeedback('✅ Aktuelles Intervall geladen', 'success');
+
+            } catch (error) {
+                console.error('Intervall Laden Fehler:', error);
+                showFeedback('❌ Fehler beim Laden des Intervalls', 'danger');
+            }
+        }
+
+        function showFeedback(message, type) {
+            const feedback = document.getElementById('intervalFeedback');
+            feedback.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+        }
+
+        // Beim Dashboard-Start aktuelles Intervall laden
+        document.addEventListener('DOMContentLoaded', function () {
+            // ... dein bestehender Code ...
+
+            // Nach erfolgreicher Validierung Intervall laden
+            setTimeout(loadCurrentInterval, 1000);
+        });
+
+        function updateDisplay(data) {
+            // Device ID korrekt aus 'id' Feld holen
+            const deviceId = data.id || data.deviceId || data.device_id || sessionStorage.getItem('current_device_id') || 'Unbekannt';
+
+            // Batterie aus verschiedenen möglichen Feldern holen
+            const batteryValue = data.battery !== undefined ? data.battery : data.battery_level;
+
+            // Basis-Informationen
+            document.getElementById('batteryLevel').textContent = batteryValue + '%';
+            document.getElementById('altitude').textContent = data.altitude + ' m';
+            document.getElementById('deviceId').textContent = deviceId;
+            document.getElementById('latitude').textContent = data.latitude + '°';
+            document.getElementById('longitude').textContent = data.longitude + '°';
+            document.getElementById('lastUpdateTime').textContent = new Date(data.timestamp).toLocaleTimeString('de-DE');
+
+            // Karte aktualisieren (nur im Live-Modus)
+            if (document.getElementById('liveModeToggle').checked) {
+                updateMapWithData(data);
+            }
+        }
+
+        // Karte mit Daten aktualisieren
+        function updateMapWithData(data) {
+            const lat = parseFloat(data.latitude);
+            const lng = parseFloat(data.longitude);
+
+            if (marker) {
+                // Device ID korrekt aus 'id' Feld holen
+                const deviceId = data.id || data.deviceId || data.device_id || sessionStorage.getItem('current_device_id') || 'Unbekannt';
+                const deviceName = currentDevice ? currentDevice.name : (data.name || 'Tracker');
+                const batteryValue = data.battery !== undefined ? data.battery : data.battery_level;
+
+                marker.setLatLng([lat, lng]).setOpacity(1);
+                marker.bindPopup(`
+            <strong>${deviceName}</strong><br>
+            ID: ${deviceId}<br>
+            Batterie: ${batteryValue}%<br>
+            Höhe: ${data.altitude}m<br>
+            Zeit: ${new Date(data.timestamp).toLocaleString('de-DE')}
+        `).openPopup();
+
+                if (!map.getBounds().contains([lat, lng])) {
+                    map.setView([lat, lng], 13);
+                }
+            }
+        }
+
+        // HISTORY FUNKTIONEN
+
+        // Verfügbare Daten laden
+        async function loadAvailableDates() {
+            try {
+                const deviceId = sessionStorage.getItem('current_device_id');
+                const response = await fetch(`/api/available-dates/${deviceId}`);
+                const dates = await response.json();
+            } catch (error) {
+                console.error('Fehler beim Laden der verfügbaren Daten:', error);
+            }
+        }
+
+        // Tagesdaten laden
+        async function loadDayData(date) {
+            try {
+                const deviceId = sessionStorage.getItem('current_device_id');
+                const response = await fetch(`/api/history/${deviceId}/${date}`);
+                historyData = await response.json();
+
+                if (historyData.length > 0) {
+                    initHistoryPlayback();
+                    updatePointsList();
+                } else {
+                    alert('Keine Daten für dieses Datum verfügbar.');
+                }
+            } catch (error) {
+                console.error('Fehler beim Laden der Tagesdaten:', error);
+            }
+        }
+
+        // History Playback initialisieren
+        function initHistoryPlayback() {
+            currentHistoryIndex = 0;
+            document.getElementById('timeSlider').max = historyData.length - 1;
+            document.getElementById('totalTime').textContent =
+                new Date(historyData[historyData.length - 1].timestamp).toLocaleTimeString('de-DE');
+
+            // Alte Marker löschen
+            clearHistoryMarkers();
+
+            showHistoryPoint(0);
+        }
+
+        // Bestimmten History-Punkt anzeigen
+        function showHistoryPoint(index) {
+            if (index < 0 || index >= historyData.length) return;
+
+            currentHistoryIndex = index;
+            const data = historyData[index];
+
+            // Karte aktualisieren
+            updateMapWithData(data);
+
+            // UI aktualisieren
+            document.getElementById('timeSlider').value = index;
+            document.getElementById('currentTime').textContent =
+                new Date(data.timestamp).toLocaleTimeString('de-DE');
+
+            // Aktiven Punkt in der Liste markieren
+            updateActivePoint(index);
+
+            // Route zeichnen falls aktiv
+            if (document.getElementById('showRouteToggle').checked) {
+                drawRouteUpToIndex(index);
+            }
+        }
+
+        // Route zeichnen bis zum Index
+        function drawRouteUpToIndex(index) {
+            if (routeLine) {
+                map.removeLayer(routeLine);
+            }
+
+            const points = historyData.slice(0, index + 1).map(data => [
+                parseFloat(data.latitude),
+                parseFloat(data.longitude)
+            ]);
+
+            if (points.length > 1) {
+                routeLine = L.polyline(points, {
+                    color: '#007bff',
+                    weight: 4,
+                    opacity: 0.7,
+                    dashArray: '5, 5'
+                }).addTo(map);
+            }
+        }
+
+        // Punkte-Liste aktualisieren
+        function updatePointsList() {
+            const container = document.getElementById('pointsList');
+            container.innerHTML = '';
+
+            historyData.forEach((data, index) => {
+                const pointElement = document.createElement('div');
+                pointElement.className = 'history-point';
+                pointElement.textContent = new Date(data.timestamp).toLocaleTimeString('de-DE').substring(0, 5);
+                pointElement.onclick = () => showHistoryPoint(index);
+
+                container.appendChild(pointElement);
+            });
+        }
+
+        // Aktiven Punkt in der Liste markieren
+        function updateActivePoint(index) {
+            const points = document.querySelectorAll('.history-point');
+            points.forEach((point, i) => {
+                point.classList.toggle('active', i === index);
+            });
+        }
+
+        // Alte History-Marker löschen
+        function clearHistoryMarkers() {
+            historyMarkers.forEach(marker => map.removeLayer(marker));
+            historyMarkers = [];
+
+            if (routeLine) {
+                map.removeLayer(routeLine);
+                routeLine = null;
+            }
+        }
+
+        // Play/Pause Toggle
+        function togglePlayback() {
+            const btn = document.getElementById('playPauseBtn');
+
+            if (isPlaying) {
+                // Pause
+                clearInterval(playInterval);
+                btn.innerHTML = '▶️ Play';
+                isPlaying = false;
+            } else {
+                // Play
+                const speed = parseInt(document.getElementById('speedSelect').value);
+                playInterval = setInterval(() => {
+                    if (currentHistoryIndex < historyData.length - 1) {
+                        showHistoryPoint(currentHistoryIndex + 1);
+                    } else {
+                        togglePlayback(); // Automatisch stoppen am Ende
+                    }
+                }, speed);
+
+                btn.innerHTML = '⏸️ Pause';
+                isPlaying = true;
+            }
+        }
+
+        // Live/History Modus wechseln
+        function toggleMode() {
+            const isLiveMode = document.getElementById('liveModeToggle').checked;
+            const historyControls = document.getElementById('historyControls');
+            const mapSubtitle = document.getElementById('mapSubtitle');
+
+            if (isLiveMode) {
+                // Live Modus
+                historyControls.style.display = 'none';
+                mapSubtitle.textContent = 'Letzte bekannte Position auf der Karte';
+                clearHistoryMarkers();
+
+                // Playback stoppen
+                if (isPlaying) {
+                    togglePlayback();
+                }
+            } else {
+                // History Modus
+                historyControls.style.display = 'block';
+                mapSubtitle.textContent = 'Historische Daten anzeigen';
+
+                // Heutiges Datum setzen
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById('datePicker').value = today;
+                loadDayData(today);
+            }
+        }
+
+        // WebSocket initialisieren
+        function initWebSocket() {
+            const socket = io();
+
+            socket.on('interval-update', (data) => {
+                // Nur Updates für aktuelles Device anzeigen
+                if (data.deviceId === sessionStorage.getItem('current_device_id')) {
+                    currentInterval = data.interval;
+                    document.getElementById('currentInterval').textContent = currentInterval;
+                    document.getElementById('refreshInfo').textContent = currentInterval;
+                    setupAutoRefresh(currentInterval);
+                }
+            });
+
+            // Live GPS Daten
+            socket.on('gps-data', (data) => {
+                // Nur Daten für aktuelles Device anzeigen
+                if (data.deviceId === sessionStorage.getItem('current_device_id')) {
+                    if (document.getElementById('liveModeToggle').checked) {
+                        updateDisplay(data);
+                    }
+                }
+            });
+        }
+
+        // Event Listener setup
+        function setupEventListeners() {
+            document.getElementById('liveModeToggle').addEventListener('change', toggleMode);
+            document.getElementById('playPauseBtn').addEventListener('click', togglePlayback);
+            document.getElementById('datePicker').addEventListener('change', function (e) {
+                loadDayData(e.target.value);
+            });
+            document.getElementById('timeSlider').addEventListener('input', function (e) {
+                showHistoryPoint(parseInt(e.target.value));
+            });
+            document.getElementById('showRouteToggle').addEventListener('change', function () {
+                if (this.checked && historyData.length > 0) {
+                    drawRouteUpToIndex(currentHistoryIndex);
+                } else if (routeLine) {
+                    map.removeLayer(routeLine);
+                    routeLine = null;
+                }
+            });
+        }
+
+        // Rest der bestehenden Funktionen...
+        async function loadIntervalInfo() {
+            try {
+                const deviceId = sessionStorage.getItem('current_device_id');
+                const response = await fetch(`/api/interval-info/${deviceId}`);
+                const intervalInfo = await response.json();
+
+                if (intervalInfo.interval) {
+                    currentInterval = intervalInfo.interval;
+                    document.getElementById('currentInterval').textContent = currentInterval;
+                    document.getElementById('refreshInfo').textContent = currentInterval;
+                    setupAutoRefresh(currentInterval);
+                }
+            } catch (error) {
+                console.error('Fehler beim Laden der Intervall-Info:', error);
+            }
+        }
+
+        function setupAutoRefresh(intervalSeconds) {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            refreshInterval = setInterval(fetchData, intervalSeconds * 1000);
+        }
+
+        function refreshData() {
+            fetchData();
+        }
+
+        // Initialisierung
+        document.addEventListener('DOMContentLoaded', function () {
+            validateAccess();
+        });
+    </script>
+</body>
+
+</html>

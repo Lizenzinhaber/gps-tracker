@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="de" data-bs-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Tracker Control</title>
+    <link href="/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --warning-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+
+        .navbar .btn-outline-light:hover {
+            background-color: white;
+            color: #000;
+            border-color: white;
+        }
+
+        .gradient-bg {
+            background: var(--primary-gradient);
+        }
+
+        .card-gradient-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+
+        .card-gradient-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+        }
+
+        .stat-card {
+            transition: all 0.3s ease;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .device-card {
+            transition: all 0.3s ease;
+            border-radius: 10px;
+            border: none;
+        }
+
+        .device-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .online {
+            border-left: 5px solid #00d2ff !important;
+        }
+
+        .offline {
+            border-left: 5px solid #6c757d !important;
+        }
+
+        .btn-glow {
+            box-shadow: 0 4px 15px 0 rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .btn-glow:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        .paired-device {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark gradient-bg">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#">
+                🛰️ GPS Tracker Control
+            </a>
+            <div class="navbar-nav ms-auto">
+                <button class="nav-link btn btn-outline-light btn-sm" id="goToDashboardBtn" style="display: none;">
+                    📊 Zum Dashboard
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Header -->
+        <div class="row mb-5">
+            <div class="col text-center">
+                <h1 class="display-5 fw-bold mb-3">GPS Tracker Pairing</h1>
+                <p class="lead text-muted">Verknüpfe deine GPS-Tracker mit der Web-App</p>
+            </div>
+        </div>
+
+        <!-- Token Eingabe Section -->
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="card stat-card card-gradient-success">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="flex-shrink-0">
+                                <div class="bg-white bg-opacity-25 rounded-circle p-3">
+                                    🔑
+                                </div>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <h5 class="card-title mb-0">Tracker hinzufügen</h5>
+                                <small class="opacity-75">Gib den Access-Token deines Trackers ein</small>
+                            </div>
+                        </div>
+
+                        <!-- Token Eingabe Form -->
+                        <div class="mb-4">
+                            <label for="deviceIdInput" class="form-label fw-bold">Tracker ID:</label>
+                            <input type="text" class="form-control bg-dark text-white mb-3" id="deviceIdInput"
+                                value="tracker-001" readonly placeholder="z.B. tracker-001">
+                            <small class="text-muted">Standard Tracker ID</small>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="accessTokenInput" class="form-label fw-bold">Access Token:</label>
+                            <input type="text" class="form-control bg-dark text-white" id="accessTokenInput"
+                                placeholder="Gib deinen Access-Token ein...">
+                            <small class="text-muted">Findest du auf deinem GPS Tracker Gerät</small>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-light btn-lg fw-bold btn-glow" id="pairDeviceBtn">
+                                🔗 Tracker verknüpfen
+                            </button>
+                        </div>
+
+                        <!-- Beispiel Token -->
+                        <div class="mt-4 p-3 bg-dark bg-opacity-50 rounded">
+                            <h6>💡 Beispiel Token:</h6>
+                            <code class="text-info">TKDCKGBLOB9DAZW5</code>
+                            <small class="d-block text-muted mt-1">
+                                Verwende diesen Token für den "Simulierter Tracker"
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status & Paired Devices -->
+            <div class="col-lg-6">
+                <div class="card stat-card card-gradient-primary h-100">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center mb-4">
+                            <div class="flex-shrink-0">
+                                <div class="bg-white bg-opacity-25 rounded-circle p-3">
+                                    📊
+                                </div>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <h5 class="card-title mb-0">System Status</h5>
+                                <small class="opacity-75">Verknüpfte Tracker</small>
+                            </div>
+                        </div>
+
+                        <div class="status-container">
+                            <div class="alert alert-dark bg-dark text-white border-0 mb-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <strong>Server Status:</strong>
+                                    <span class="badge bg-success pulse">🟢 Online</span>
+                                </div>
+                            </div>
+
+                            <div id="pairingStatus" class="alert alert-info bg-dark text-white border-0 mb-3">
+                                <strong>Bereit:</strong> Gib einen Access-Token ein um zu beginnen
+                            </div>
+
+                            <!-- Verknüpfte Geräte -->
+                            <div id="pairedDevicesContainer">
+                                <h6 class="text-white mb-3">Verknüpfte Tracker:</h6>
+                                <!-- Wird dynamisch befüllt -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card stat-card bg-dark text-white">
+                    <div class="card-header bg-dark bg-opacity-50 border-0">
+                        <h5 class="mb-0">ℹ️ So funktioniert's</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4 text-center">
+                                <div class="mb-3">1️⃣</div>
+                                <h6>Token finden</h6>
+                                <p class="small text-muted">Suche den Access-Token auf deinem GPS Tracker</p>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <div class="mb-3">2️⃣</div>
+                                <h6>Token eingeben</h6>
+                                <p class="small text-muted">Kopiere den Token in das Eingabefeld</p>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <div class="mb-3">3️⃣</div>
+                                <h6>Automatische Weiterleitung</h6>
+                                <p class="small text-muted">Nach erfolgreicher Verknüpfung zum Dashboard</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Paired Devices aus Local Storage laden
+        function loadPairedDevices() {
+            const pairedDevices = JSON.parse(localStorage.getItem('paired_devices') || '[]');
+            renderPairedDevices(pairedDevices);
+
+            // Dashboard Button anzeigen falls Geräte gepaired sind
+            if (pairedDevices.length > 0) {
+                document.getElementById('goToDashboardBtn').style.display = 'block';
+            }
+        }
+
+        // Paired Devices anzeigen
+        function renderPairedDevices(devices) {
+            const container = document.getElementById('pairedDevicesContainer');
+
+            if (devices.length === 0) {
+                container.innerHTML = '<p class="text-muted">Noch keine Tracker verknüpft</p>';
+                return;
+            }
+
+            container.innerHTML = '<h6 class="text-white mb-3">Verknüpfte Tracker:</h6>' +
+                devices.map(device => `
+            <div class="card device-card paired-device mb-2" 
+                 onclick="goToDashboard('${device.device_id}', '${device.access_token}')"
+                 style="cursor: pointer;">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-0">${device.name}</h6>
+                            <small class="text-muted">${device.device_id}</small>
+                        </div>
+                        <span class="badge bg-success">🟢 Paired</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        }
+
+        // Device pairen
+        async function pairDevice() {
+            const deviceId = document.getElementById('deviceIdInput').value.trim();
+            const accessToken = document.getElementById('accessTokenInput').value.trim();
+
+            if (!deviceId || !accessToken) {
+                updatePairingStatus('Bitte gib beide Felder aus!', 'warning');
+                return;
+            }
+
+            try {
+                updatePairingStatus('Verknüpfe Tracker...', 'warning');
+
+                const response = await fetch('/api/validate-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_id: deviceId,
+                        access_token: accessToken
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Device zu Local Storage hinzufügen
+                    const pairedDevices = JSON.parse(localStorage.getItem('paired_devices') || '[]');
+                    const existingIndex = pairedDevices.findIndex(d => d.device_id === deviceId);
+
+                    if (existingIndex === -1) {
+                        pairedDevices.push({
+                            device_id: deviceId,
+                            access_token: accessToken,
+                            name: result.device.name || 'Unbekannter Tracker',
+                            paired_at: new Date().toISOString()
+                        });
+                    } else {
+                        pairedDevices[existingIndex] = {
+                            ...pairedDevices[existingIndex],
+                            access_token: accessToken,
+                            name: result.device.name || 'Unbekannter Tracker'
+                        };
+                    }
+
+                    localStorage.setItem('paired_devices', JSON.stringify(pairedDevices));
+
+                    // Session Storage für aktuelles Device
+                    sessionStorage.setItem('current_device_id', deviceId);
+                    sessionStorage.setItem('current_access_token', accessToken);
+
+                    updatePairingStatus(`✅ Erfolgreich verknüpft: ${result.device.name}`, 'success');
+                    loadPairedDevices();
+
+                    // Eingabefeld leeren
+                    document.getElementById('accessTokenInput').value = '';
+
+                    // Automatisch zum Dashboard nach 2 Sekunden
+                    setTimeout(() => {
+                        window.location.href = `/dashboard?token=${accessToken}&device=${deviceId}`;
+                    }, 2000);
+
+                } else {
+                    throw new Error(result.message || 'Unbekannter Fehler');
+                }
+
+            } catch (error) {
+                console.error('Pairing Fehler:', error);
+                updatePairingStatus('Pairing fehlgeschlagen: ' + error.message, 'danger');
+            }
+        }
+
+        // Status aktualisieren
+        function updatePairingStatus(message, type) {
+            const statusElement = document.getElementById('pairingStatus');
+            statusElement.innerHTML = `<strong>${message}</strong>`;
+            statusElement.className = `alert alert-${type} bg-dark text-white border-0 mb-3`;
+        }
+
+        // Zum Dashboard navigieren
+        function goToDashboard(deviceId, accessToken) {
+            // Session Storage setzen
+            sessionStorage.setItem('current_device_id', deviceId);
+            sessionStorage.setItem('current_access_token', accessToken);
+
+            // Zum Dashboard navigieren
+            window.location.href = `/dashboard?token=${accessToken}&device=${deviceId}`;
+        }
+
+        // Event Listeners
+        document.getElementById('pairDeviceBtn').addEventListener('click', pairDevice);
+
+        // Enter-Taste in Token-Feld
+        document.getElementById('accessTokenInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                pairDevice();
+            }
+        });
+
+        document.getElementById('goToDashboardBtn').addEventListener('click', () => {
+            const pairedDevices = JSON.parse(localStorage.getItem('paired_devices') || '[]');
+            if (pairedDevices.length > 0) {
+                const device = pairedDevices[0];
+                window.location.href = `/dashboard?token=${device.access_token}&device=${device.device_id}`;
+            }
+        });
+
+        // Initialisierung
+        document.addEventListener('DOMContentLoaded', function () {
+            loadPairedDevices();
+
+            // Prüfen ob bereits ein Device in Session ist
+            const currentToken = sessionStorage.getItem('current_access_token');
+            const currentDevice = sessionStorage.getItem('current_device_id');
+
+            if (currentToken && currentDevice) {
+                updatePairingStatus(`Bereits verbunden mit: ${currentDevice}`, 'info');
+                document.getElementById('goToDashboardBtn').style.display = 'block';
+            }
+
+            // Fokus auf Token Eingabefeld
+            document.getElementById('accessTokenInput').focus();
+        });
+    </script>
+</body>
+
+</html>
