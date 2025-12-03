@@ -1,12 +1,16 @@
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 
+
 // Config & Modules
 const { loadDeviceConfig } = require('./config/database');
 const { setupRoutes } = require('./routes');
 const { setupWebSocket } = require('./websocket/tracker');
+const { setupTTNMqtt } = require('./mqtt/ttn');
 
 const app = express();
 const server = http.createServer(app);
@@ -37,6 +41,9 @@ async function initializeServer() {
         
         // WebSocket setup
         setupWebSocket(io, deviceConfig, deviceIntervals);
+
+        // MQTT (TTN) setup
+        setupTTNMqtt(io);
         
         // Server starten
         const PORT = process.env.PORT || 3000;

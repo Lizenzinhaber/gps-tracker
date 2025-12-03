@@ -1,5 +1,7 @@
 const { pool } = require('../config/database');
 
+const ENABLE_MOCK = false;
+
 function setupWebSocket(io, deviceConfig, deviceIntervals) {
     io.on('connection', (socket) => {
         console.log('Client connected:', socket.id);
@@ -17,11 +19,13 @@ function setupWebSocket(io, deviceConfig, deviceIntervals) {
         // Simuliere GPS Daten für aktive Tracker
         const trackerIntervals = {};
         
-        Object.keys(deviceIntervals).forEach(deviceId => {
-            if (deviceConfig[deviceId] && deviceConfig[deviceId].is_active !== false) {
-                startTrackerInterval(deviceId, socket, trackerIntervals, deviceIntervals);
-            }
-        });
+        if (ENABLE_MOCK) {
+            Object.keys(deviceIntervals).forEach(deviceId => {
+                if (deviceConfig[deviceId] && deviceConfig[deviceId].is_active !== false) {
+                    startTrackerInterval(deviceId, socket, trackerIntervals, deviceIntervals);
+                }
+            });
+        }
         
         socket.on('disconnect', () => {
             console.log('Client disconnected:', socket.id);
@@ -87,7 +91,7 @@ function handleIntervalUpdate(data, socket, trackerIntervals, deviceConfig) {
     }
     
     // Nur für aktive Tracker neues Intervall starten
-    if (deviceConfig[deviceId] && deviceConfig[deviceId].is_active !== false) {
+    if (ENABLE_MOCK && deviceConfig[deviceId] && deviceConfig[deviceId].is_active !== false) {
         trackerIntervals[deviceId] = setInterval(async () => {
             const mockData = {
                 deviceId: deviceId,

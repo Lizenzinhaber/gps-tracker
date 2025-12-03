@@ -354,6 +354,7 @@
     <script src="/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+        const ENABLE_CLIENT_MOCK = false;
         // Globale Variablen
         let map;
         let marker;
@@ -514,8 +515,9 @@
 
         // Mock-Daten generieren (temporär)
         function generateMockData(deviceId) {
-            const baseLat = 48.1351 + (Math.random() * 0.02 - 0.01);
-            const baseLng = 11.5820 + (Math.random() * 0.02 - 0.01);
+            if(!ENABLE_CLIENT_MOCK) return null;
+            const baseLat = 48.207113 + (Math.random() * 0.02 - 0.01);
+            const baseLng = 15.619102 + (Math.random() * 0.02 - 0.01);
 
             return {
                 deviceId: deviceId,
@@ -657,6 +659,43 @@
                 }
             }
         }
+
+        // Load latest TTN GPS data
+        async function loadTTNData() {
+            if (!currentDevice) return;
+            
+            try {
+                const response = await fetch(`/api/devices/${currentDevice}/ttn-latest`);
+                if (!response.ok) throw new Error('Failed to load TTN data');
+                
+                const gpsData = await response.json();
+                
+                // Update display
+                updateDisplay(gpsData);
+                updateMapWithData(gpsData);
+                
+                console.log('TTN GPS data loaded:', gpsData);
+            } catch (error) {
+                console.error('Error loading TTN data:', error);
+            }
+        }
+
+        // Add button to dashboard to manually fetch TTN data
+        function setupTTNButton() {
+            const ttnBtn = document.createElement('button');
+            ttnBtn.className = 'btn btn-primary ms-2';
+            ttnBtn.textContent = 'Load TTN GPS';
+            ttnBtn.onclick = loadTTNData;
+            
+            // Append to navbar or control section
+            document.querySelector('.navbar-nav')?.appendChild(ttnBtn);
+        }
+
+        // Initialize TTN on dashboard load
+        document.addEventListener('DOMContentLoaded', function () {
+            setupTTNButton();
+            setTimeout(loadCurrentInterval, 1000);
+        });
 
         // HISTORY FUNKTIONEN
 
@@ -837,6 +876,22 @@
         // WebSocket initialisieren
         function initWebSocket() {
             const socket = io();
+
+            // when connected, request latest DB entry once (so map shows something immediately)
+            socket.on('connect', async () => {
+                const deviceId = sessionStorage.getItem('current_device_id');
+                if (!deviceId) return;
+                try {
+                    const resp = await fetch(`/api/devices/${deviceId}`);
+                    if (!resp.ok) throw new Error('Failed to load latest device data');
+                    const latest = await resp.json();
+                    // Update UI & map using same helpers
+                    updateDisplay(latest);
+                    updateMapWithData(latest);
+                } catch (err) {
+                    console.warn('Could not fetch latest device data on socket connect:', err.message);
+                }
+            });
 
             socket.on('interval-update', (data) => {
                 // Nur Updates für aktuelles Device anzeigen

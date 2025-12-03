@@ -1,12 +1,15 @@
+require('dotenv').config
+
 const mariadb = require('mariadb');
 
 const pool = mariadb.createPool({
-    host: 'localhost',
-    user: 'gps_user',
-    password: 'DiplomArbeit2025', // Ändere das!
-    database: 'gps_tracker',
+    host: process.env.DATABASE_HOST || 'localhost',
+    user: process.env.DATABASE_USER || 'gps_user',
+    password: process.env.DATABASE_PASSWORD,
+    database: process.env.DATABASE_NAME || 'gps_tracker',
     connectionLimit: 5
 });
+
 
 // Hilfsfunktion zum Laden der Device-Konfig
 async function loadDeviceConfig() {
