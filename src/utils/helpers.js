@@ -45,11 +45,11 @@ function calculateTrackerConnection(lastUpdateAt, expectedIntervalSeconds, batte
 		message = 'Keine Verbindung zum GPS-Tracker.';
 	} else if (secondsSinceLastUpdate > delayThresholdSeconds) {
 		state = 'delayed';
-		message = 'Tracker sendet verspaetet, moeglicherweise im Sleep/Battery-Saving-Modus.';
+		message = 'Tracker sendet verspaetet, moeglicherweise wegen laengerer GNSS-Fix-Zeit oder Funkverzug.';
 	}
 
 	if (state !== 'disconnected' && batterySavingActive) {
-		message += ` Battery-Saving beruecksichtigt (Intervall ${interval}s).`;
+		message += ` Intervall ${interval}s beruecksichtigt.`;
 	}
 
 	return {

@@ -679,6 +679,7 @@
                         <option value="3600" label="1 Stunde"></option>
                     </datalist>
                     <div class="small text-muted-soft mb-3">Vorgaben: 30s, 60s, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 Stunde</div>
+                    <div class="small text-muted-soft mb-3">Hinweis: Die Aenderung wirkt nur, wenn der Tracker TTN-Downlinks auf Port 1 verarbeitet.</div>
                     <div class="d-grid gap-2">
                         <button class="btn btn-success" type="button" onclick="updateInterval()">Intervall speichern</button>
                         <button class="btn btn-outline-light" type="button" onclick="loadCurrentInterval()">Aktuelles laden</button>
@@ -924,7 +925,7 @@
 
         function intervalSourceLabel(source) {
             if (source === 'configured') {
-                return 'Gespeicherter Wert (Downlink-Sollwert)';
+                return 'Gespeicherter Sollwert';
             }
             if (source === 'device_default') {
                 return 'Tracker-Default (60s)';
