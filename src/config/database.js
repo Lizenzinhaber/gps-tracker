@@ -1,7 +1,8 @@
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const mariadb = require('mariadb');
 const pool = mariadb.createPool({
     host: process.env.DATABASE_HOST || 'localhost',
+    port: parseInt(process.env.DATABASE_PORT || '3306', 10),
     user: process.env.DATABASE_USER || 'gps_user',
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME || 'gps_tracker',
@@ -22,7 +23,8 @@ async function loadDeviceConfig() {
             deviceConfig[device.device_id] = {
                 name: device.name,
                 type: device.type,
-                description: device.description
+                description: device.description,
+                is_active: device.is_active
             };
         });
         
@@ -34,13 +36,9 @@ async function loadDeviceConfig() {
         
     } catch (error) {
         console.error('Fehler beim Laden der Device-Konfig:', error);
-        // Fallback zu hardgecodeten Werten
         return {
-            deviceConfig: {
-                'tracker-001': { name: 'Simulierter Tracker', type: 'main', description: 'Haupt-GPS Tracker' },
-                'tracker-002': { name: 'Reserve Tracker', type: 'backup', description: 'Backup GPS Tracker' }
-            },
-            deviceIntervals: { 'tracker-001': 60, 'tracker-002': 300 }
+            deviceConfig: {},
+            deviceIntervals: {}
         };
     } finally {
         if (conn) conn.release();

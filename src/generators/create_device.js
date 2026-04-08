@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const { pool } = require('../config/database');
 
 function generateAccessToken() {

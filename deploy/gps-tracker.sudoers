@@ -1,0 +1,1 @@
+punl-wilc ALL=(root) NOPASSWD: /usr/bin/install, /usr/bin/systemctl, /usr/bin/journalctl, /usr/sbin/visudo

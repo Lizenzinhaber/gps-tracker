@@ -1,0 +1,22 @@
+[Unit]
+Description=GPS Tracker WebApp Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=punl-wilc
+Group=punl-wilc
+WorkingDirectory=/home/punl-wilc/Documents/gps-tracker
+Environment=NODE_ENV=production
+EnvironmentFile=-/home/punl-wilc/Documents/gps-tracker/.env
+ExecStart=/usr/bin/node /home/punl-wilc/Documents/gps-tracker/src/server.js
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=20
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

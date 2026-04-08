@@ -1,4 +1,57 @@
 const { pool } = require('../config/database');
+const { queueIntervalDownlink } = require('../mqtt/ttn');
+
+async function ensureDeviceExistsForInterval(conn, deviceId) {
+    const existing = await conn.query(
+        'SELECT device_id FROM devices WHERE device_id = ? LIMIT 1',
+        [deviceId]
+    );
+
+    if (existing.length > 0) {
+        return 'existing';
+    }
+
+    const accessRows = await conn.query(
+        `SELECT device_id, name, type, description, is_active
+         FROM device_access
+         WHERE device_id = ?
+         LIMIT 1`,
+        [deviceId]
+    );
+
+    if (accessRows.length > 0) {
+        const row = accessRows[0];
+        await conn.query(
+            `INSERT INTO devices (device_id, name, type, description, is_active)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                 name = VALUES(name),
+                 type = VALUES(type),
+                 description = VALUES(description),
+                 is_active = VALUES(is_active)`,
+            [
+                row.device_id,
+                row.name || `Tracker ${row.device_id}`,
+                row.type || 'main',
+                row.description || null,
+                row.is_active === undefined || row.is_active === null ? 1 : row.is_active
+            ]
+        );
+        return 'device_access';
+    }
+
+    const fallbackName = `Tracker ${String(deviceId).slice(0, 92)}`;
+    await conn.query(
+        `INSERT INTO devices (device_id, name, type, description, is_active)
+         VALUES (?, ?, 'main', ?, 1)
+         ON DUPLICATE KEY UPDATE
+             name = VALUES(name),
+             description = VALUES(description)`,
+        [deviceId, fallbackName, 'Automatisch angelegt durch Intervall-Update']
+    );
+
+    return 'fallback';
+}
 
 // Intervall setzen
 async function setInterval(req, res, io, deviceIntervals) {
@@ -8,38 +61,69 @@ async function setInterval(req, res, io, deviceIntervals) {
         console.log(`Intervall ${interval}s für Device ${deviceId}`);
         
         // Validation
-        if (!deviceId || !interval) {
+        if (!deviceId || interval === undefined || interval === null) {
             return res.status(400).json({ 
                 status: 'error', 
                 message: 'deviceId and interval are required' 
             });
         }
         
-        const intervalNum = parseInt(interval);
+        const intervalNum = parseInt(interval, 10);
         if (isNaN(intervalNum)) {
             return res.status(400).json({ 
                 status: 'error', 
                 message: 'interval must be a number' 
             });
         }
+
+        if (intervalNum < 30 || intervalNum > 3600) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'interval must be between 30 and 3600 seconds'
+            });
+        }
         
         // In Datenbank speichern
         const conn = await pool.getConnection();
-        await conn.query(
-            'INSERT INTO device_intervals (device_id, interval_seconds) VALUES (?, ?) ON DUPLICATE KEY UPDATE interval_seconds = ?',
-            [deviceId, intervalNum, intervalNum]
-        );
-        conn.release();
+        let deviceRegisterSource = 'existing';
+        try {
+            deviceRegisterSource = await ensureDeviceExistsForInterval(conn, deviceId);
+
+            await conn.query(
+                `INSERT INTO device_intervals (device_id, interval_seconds)
+                 VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE interval_seconds = VALUES(interval_seconds)`,
+                [deviceId, intervalNum]
+            );
+        } finally {
+            conn.release();
+        }
         
         // Lokal aktualisieren
         deviceIntervals[deviceId] = intervalNum; 
         io.emit('interval-update', { interval: intervalNum, deviceId, timestamp: new Date() });
+
+        let downlink;
+        try {
+            downlink = await queueIntervalDownlink(deviceId, intervalNum);
+            console.log(`TTN downlink queued for ${deviceId}: ${intervalNum}s`);
+        } catch (downlinkError) {
+            console.error(`TTN downlink failed for ${deviceId}:`, downlinkError.message);
+            downlink = {
+                queued: false,
+                error: downlinkError.message
+            };
+        }
         
         res.json({ 
             status: 'success', 
             interval: intervalNum,
             deviceId: deviceId,
-            message: 'Intervall erfolgreich gesetzt'
+            deviceRegisterSource,
+            downlink,
+            message: downlink && downlink.queued === false
+                ? 'Intervall gespeichert, aber TTN Downlink fehlgeschlagen'
+                : 'Intervall erfolgreich gesetzt'
         });
     } catch (error) {
         console.error('Error in setInterval:', error);
@@ -65,12 +149,16 @@ async function getIntervalInfo(req, res) {
         if (interval.length > 0) {
             res.json({ 
                 interval: interval[0].interval_seconds,
-                deviceId: deviceId
+                deviceId: deviceId,
+                source: 'configured',
+                note: 'Gespeicherter Wert aus device_intervals'
             });
         } else {
             res.json({ 
                 interval: 60, // Default
-                deviceId: deviceId
+                deviceId: deviceId,
+                source: 'device_default',
+                note: 'Kein gespeicherter Wert, Tracker-Default 60 Sekunden'
             });
         }
     } catch (error) {

@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 const express = require('express');
 const http = require('http');
@@ -10,7 +10,8 @@ const path = require('path');
 const { loadDeviceConfig } = require('./config/database');
 const { setupRoutes } = require('./routes');
 const { setupWebSocket } = require('./websocket/tracker');
-const { setupTTNMqtt } = require('./mqtt/ttn');
+const { setupTTNMqtt, getTTNMqttStatus } = require('./mqtt/ttn');
+const { resolveServerUrls } = require('./utils/helpers');
 
 const app = express();
 const server = http.createServer(app);
@@ -44,17 +45,33 @@ async function initializeServer() {
 
         // MQTT (TTN) setup
         setupTTNMqtt(io);
+
+        const ttnStatus = getTTNMqttStatus();
+        if (!ttnStatus.configured) {
+            console.warn('TTN MQTT nicht aktiv: Konfiguration in .env unvollstaendig.');
+        } else {
+            console.log('TTN MQTT initialisiert, warte auf Uplink-Daten.');
+        }
         
         // Server starten
-        const PORT = process.env.PORT || 3000;
-        server.listen(PORT, '0.0.0.0', () => {
-            console.log(`🚀 GPS Tracker Server läuft auf http://0.0.0.0:${PORT}`);
-            console.log(`📊 Dashboard verfügbar unter http://0.0.0.0:${PORT}/dashboard`);
-            console.log(`🔐 Security System aktiviert`);
-            console.log(`📁 Modulare Struktur geladen`);
+        const PORT = Number(process.env.PORT || 3000);
+        const HOST = process.env.HOST || '0.0.0.0';
+
+        server.listen(PORT, HOST, () => {
+            const urls = resolveServerUrls(HOST, PORT);
+
+            console.log('GPS Tracker Server gestartet.');
+            urls.forEach((url) => {
+                console.log(`Server URL: ${url}`);
+            });
+            urls.forEach((url) => {
+                console.log(`Dashboard URL: ${url}/dashboard`);
+            });
+            console.log('Security System aktiviert.');
+            console.log('Modulare Struktur geladen.');
         });
         
-            } catch (error) {
+    } catch (error) {
         console.error('Server Initialization Error:', error);
         process.exit(1);
     }
